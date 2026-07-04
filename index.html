@@ -1043,7 +1043,7 @@ function initFirebase() {
       const newData = {};
       snap.forEach(doc => {
         const d = doc.data();
-        if (d.size) newData[+doc.id] = {size: d.size, locked: !!d.locked, qty: d.qty || 1, gk: !!d.gk};
+        if (d.size || d.gk) newData[+doc.id] = {size: d.size || null, locked: !!d.locked, qty: d.qty || 1, gk: !!d.gk};
       });
       data = newData;
       saveCache();
