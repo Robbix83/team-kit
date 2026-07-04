@@ -7,6 +7,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>⚽ ניהול ביגוד קבוצה</title>
 
+  <!-- Rubik font (Hebrew + Latin) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
   <!-- Firebase 10 compat (CDN) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -51,7 +56,7 @@
     }
 
     body {
-      font-family: -apple-system, 'Segoe UI', Arial, sans-serif;
+      font-family: 'Rubik', -apple-system, 'Segoe UI', Arial, sans-serif;
       direction: rtl;
       background: #ffffff;
       min-height: 100dvh;
@@ -103,7 +108,7 @@
       text-transform: uppercase;
       outline: none;
       transition: border-color 0.2s;
-      font-family: 'Courier New', monospace;
+      font-family: 'Rubik', monospace;
     }
 
     .login-input:focus { border-color: var(--blue); }
@@ -326,7 +331,7 @@
       font-weight: 700;
       cursor: pointer;
       transition: all 0.1s;
-      font-family: 'Courier New', monospace;
+      font-family: 'Rubik', monospace;
     }
 
     .sz-btn:hover { filter: brightness(0.9); }
@@ -457,7 +462,7 @@
       padding: 1px 5px;
       border-radius: 3px;
       color: #fff;
-      font-family: 'Courier New', monospace;
+      font-family: 'Rubik', monospace;
     }
 
     .cell-dash { font-size: 11px; color: var(--gray-300); margin-top: 3px; }
