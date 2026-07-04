@@ -778,7 +778,7 @@
         <div class="pk-qty-btns" id="qtyBtns"></div>
       </div>
       <div class="pk-gk-row">
-        <button id="gkBtn" class="gk-btn" onclick="toggleGk()">🧤 שוער</button>
+        <button id="gkBtn" class="gk-btn" onclick="toggleGk()">שוער</button>
       </div>
       <div class="pk-lock-row">
         <label class="pk-lock-lbl">
@@ -1150,7 +1150,7 @@ function render() {
     cell.innerHTML =
       (lk  ? '<span class="cell-lk">🔒</span>' : '') +
       (has && qty > 1 ? `<span class="cell-qty">×${qty}</span>` : '') +
-      (isGk ? '<div class="cell-gk">🧤 שוער</div>' : '') +
+      (isGk ? '<div class="cell-gk">שוער</div>' : '') +
       `<div class="cell-num">${n}</div>` +
       (has
         ? `<div class="cell-badge" style="background:${SZ_HEX[e.size]}">${e.size}</div>`
@@ -1237,7 +1237,8 @@ function assignSize(sz) {
   const lock = document.getElementById('lkChk').checked;
   const qtyActive = document.querySelector('.qty-btn.active');
   const qty = qtyActive ? +qtyActive.textContent : 1;
-  applySize(sel, sz ? {size: sz, locked: lock, qty} : null);
+  const gk = !!data[sel]?.gk;
+  applySize(sel, sz ? {size: sz, locked: lock, qty, gk} : null);
   closePk();
 }
 
@@ -1267,7 +1268,7 @@ function toggleGk() {
   }
 
   render();
-  showToast(newGk ? `🧤 מספר ${sel} סומן כשוער` : `מספר ${sel} הוסר מסימון שוער`);
+  showToast(newGk ? `מספר ${sel} סומן כשוער` : `מספר ${sel} הוסר מסימון שוער`);
 }
 
 /* ══════════════════ LOCK ALL ══════════════════ */
@@ -1379,7 +1380,7 @@ function renderSum() {
             const note = data[n]?.note;
             const qty  = data[n]?.qty || 1;
             const isGk = !!data[n]?.gk;
-            return `<div class="sum-num">#${n}${isGk?' 🧤':''}${qty>1?` <strong style="color:var(--blue)">×${qty}</strong>`:''}`
+            return `<div class="sum-num">#${n}${isGk?' שוער':''}${qty>1?` <strong style="color:var(--blue)">×${qty}</strong>`:''}`
               + `${note ? `<span class="sum-note-text">${note}</span>` : ''}</div>`;
           }).join('')}
         </div>
@@ -1404,7 +1405,7 @@ function buildExportDOM() {
             const note = data[n]?.note;
             const qty  = data[n]?.qty || 1;
             const isGk = !!data[n]?.gk;
-            return `<span style="font-size:14px;font-weight:700;padding:3px 9px;border-radius:5px;color:${SZ_HEX[sz]};border:1.5px solid ${SZ_HEX[sz]}55;background:${SZ_BG_HEX[sz]}">#${n}${isGk?' 🧤':''}${qty>1?` <span style="color:#2563a8">×${qty}</span>`:''}${note ? `<span style="font-size:11px;font-weight:400;display:block;color:#64748b">${note}</span>` : ''}</span>`;
+            return `<span style="font-size:14px;font-weight:700;padding:3px 9px;border-radius:5px;color:${SZ_HEX[sz]};border:1.5px solid ${SZ_HEX[sz]}55;background:${SZ_BG_HEX[sz]}">#${n}${isGk?' שוער':''}${qty>1?` <span style="color:#2563a8">×${qty}</span>`:''}${note ? `<span style="font-size:11px;font-weight:400;display:block;color:#64748b">${note}</span>` : ''}</span>`;
           }).join('')}
         </div>
       </div>`)
@@ -1500,7 +1501,7 @@ function sendEmail() {
   // Number → size table (grouped in rows of 15 like the supplier form)
   const rows = entries.map(e => {
     const qty  = data[e.n]?.qty > 1 ? ` ×${data[e.n].qty}` : '';
-    const isGk = data[e.n]?.gk ? ' 🧤שוער' : '';
+    const isGk = data[e.n]?.gk ? ' שוער' : '';
     const note = data[e.n]?.note ? `  ← ${data[e.n].note}` : '';
     return `${String(e.n).padStart(2, ' ')}  |  ${e.size}${qty}${isGk}${note}`;
   }).join('\n');
