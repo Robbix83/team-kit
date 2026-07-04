@@ -598,14 +598,35 @@
     .pk-note-input:focus { border-color: var(--blue); }
     .pk-note-input::placeholder { color: var(--gray-400); }
 
-    /* ── NOTE in summary ── */
-    .sum-note-text {
-      font-size: 11px;
-      color: var(--gray-500);
-      font-weight: 400;
-      display: block;
-      margin-top: 1px;
+    /* ── ORDER NOTE (global, in summary) ── */
+    .sum-note-wrap {
+      margin-bottom: 14px;
     }
+
+    .sum-note-lbl {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--gray-600);
+      margin-bottom: 5px;
+    }
+
+    .sum-note-area {
+      width: 100%;
+      padding: 10px 13px;
+      font-size: 14px;
+      font-family: 'Rubik', sans-serif;
+      border: 1.5px solid var(--gray-200);
+      border-radius: var(--radius);
+      resize: vertical;
+      direction: rtl;
+      outline: none;
+      color: var(--gray-800);
+      transition: border-color 0.2s;
+      min-height: 72px;
+    }
+
+    .sum-note-area:focus { border-color: var(--blue); }
 
     /* ── EXPORT TARGET (off-screen for html2canvas) ── */
     #exportTarget {
@@ -729,9 +750,6 @@
         <span class="pk-qty-label">כמות:</span>
         <div class="pk-qty-btns" id="qtyBtns"></div>
       </div>
-      <div class="pk-note-row">
-        <input type="text" id="noteInput" class="pk-note-input" placeholder="📝 הערה לספק (אופציונלי)" maxlength="80">
-      </div>
       <div class="pk-lock-row">
         <label class="pk-lock-lbl">
           <input type="checkbox" id="lkChk">
@@ -770,6 +788,10 @@
       </div>
     </div>
     <div class="sum-info" id="sumInfo">—</div>
+    <div class="sum-note-wrap">
+      <label class="sum-note-lbl">📝 הערות להזמנה (לספק):</label>
+      <textarea id="orderNoteArea" class="sum-note-area" placeholder="הוסף הערות לספק כאן... (סוג בד, שינויים מיוחדים, הוראות הדפסה...)"></textarea>
+    </div>
     <div class="sum-groups" id="sumGroups"></div>
   </div>
 
@@ -814,12 +836,13 @@ const SZ_BG_HEX = {
 const IS_DEMO = FIREBASE_CONFIG.apiKey === 'YOUR_API_KEY';
 
 /* ══════════════════ STATE ══════════════════ */
-let data       = {};  // { [num: number]: {size: string, locked: boolean} }
+let data       = {};  // { [num: number]: {size: string, locked: boolean, qty: number} }
 let sel        = null;
 let sumOpen    = false;
 let teamCode   = '';
 let db         = null;
 let unsubscribe = null;
+let orderNote  = '';
 
 /* ══════════════════ BOOT ══════════════════ */
 if (IS_DEMO) {
@@ -855,6 +878,16 @@ if (IS_DEMO) {
     b.onclick = () => {
       document.querySelectorAll('.qty-btn').forEach(x => x.classList.remove('active'));
       b.classList.add('active');
+      // Auto-save qty if the number already has a size
+      if (sel !== null && data[sel]?.size) {
+        data[sel].qty = q;
+        if (IS_DEMO) { saveDemo(); }
+        else if (db) {
+          db.collection('teams').doc(teamCode).collection('sizes').doc(String(sel))
+            .update({qty: q}).catch(() => {});
+        }
+        render();
+      }
     };
     wrap.appendChild(b);
   });
@@ -875,17 +908,6 @@ document.getElementById('codeInput').addEventListener('keydown', e => {
   if (e.key === 'Enter') enterTeam();
 });
 
-document.getElementById('noteInput').addEventListener('blur', function() {
-  if (sel === null || !data[sel]) return;
-  const note = this.value.trim();
-  if (note === (data[sel].note || '')) return;
-  data[sel].note = note;
-  if (IS_DEMO) { saveDemo(); }
-  else if (db) {
-    db.collection('teams').doc(teamCode).collection('sizes').doc(String(sel))
-      .update({note}).catch(() => {});
-  }
-});
 
 /* ══════════════════ LOGIN / LOGOUT ══════════════════ */
 function enterTeam() {
@@ -911,7 +933,8 @@ function enterTeam() {
 
 function exitApp() {
   if (unsubscribe) { unsubscribe(); unsubscribe = null; }
-  data = {}; sel = null; sumOpen = false;
+  data = {}; sel = null; sumOpen = false; orderNote = '';
+  document.getElementById('orderNoteArea').value = '';
   document.getElementById('app').style.display        = 'none';
   document.getElementById('sumPanel').classList.remove('open');
   document.getElementById('loginScreen').style.display = 'flex';
@@ -936,6 +959,7 @@ function initDemo() {
   data = fixed;
 
   render();
+  loadOrderNote();
 }
 
 function buildDemoData() {
@@ -969,12 +993,13 @@ function initFirebase() {
       const newData = {};
       snap.forEach(doc => {
         const d = doc.data();
-        if (d.size) newData[+doc.id] = {size: d.size, locked: !!d.locked, note: d.note || '', qty: d.qty || 1};
+        if (d.size) newData[+doc.id] = {size: d.size, locked: !!d.locked, qty: d.qty || 1};
       });
       data = newData;
 
       render();
       if (sumOpen) renderSum();
+      loadOrderNote();
     }, err => {
       console.error('Firestore error:', err);
       document.getElementById('loadingOverlay').style.display = 'none';
@@ -1128,7 +1153,6 @@ function openPk(n) {
     pkNormal.style.display = 'block';
     document.getElementById('pkNum').textContent = n;
     document.getElementById('lkChk').checked = false;
-    document.getElementById('noteInput').value = e?.note || '';
     // Set qty selection
     const curQty = Math.min(e?.qty || 1, 5);
     document.querySelectorAll('.qty-btn').forEach(x => x.classList.remove('active'));
@@ -1156,10 +1180,9 @@ function closePk() {
 function assignSize(sz) {
   if (sel === null) return;
   const lock = document.getElementById('lkChk').checked;
-  const note = document.getElementById('noteInput').value.trim();
   const qtyActive = document.querySelector('.qty-btn.active');
   const qty = qtyActive ? +qtyActive.textContent : 1;
-  applySize(sel, sz ? {size: sz, locked: lock, note, qty} : null);
+  applySize(sel, sz ? {size: sz, locked: lock, qty} : null);
   closePk();
 }
 
@@ -1306,13 +1329,18 @@ function buildExportDOM() {
       </div>`)
     .join('');
 
+  const noteHTML = orderNote
+    ? `<div style="margin-bottom:16px;padding:10px 14px;background:#fef9c3;border:1px solid #facc15;border-radius:8px;font-size:14px;color:#78350f;direction:rtl;"><strong>הערות להזמנה:</strong> ${orderNote}</div>`
+    : '';
+
   document.getElementById('exportTarget').innerHTML = `
     <div style="border-bottom:3px solid #1e3a5f;padding-bottom:16px;margin-bottom:20px;">
       <div style="font-size:26px;font-weight:700;color:#1e293b;">⚽ ניהול ביגוד קבוצה</div>
       <div style="font-size:14px;color:#64748b;margin-top:5px;">
-        קוד קבוצה: <strong>${teamCode}</strong> &nbsp;|&nbsp; ${today} &nbsp;|&nbsp; סה"כ ${total} שחקנים
+        קוד קבוצה: <strong>${teamCode}</strong> &nbsp;|&nbsp; ${today} &nbsp;|&nbsp; סה"כ ${total} מספרים
       </div>
     </div>
+    ${noteHTML}
     ${groupsHTML || '<div style="color:#94a3b8;font-size:15px;padding:20px;">אין מידות מוגדרות</div>'}
     <div style="margin-top:20px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:11px;color:#94a3b8;text-align:center;">
       הופק ע"י מערכת ניהול ביגוד קבוצה
@@ -1403,12 +1431,14 @@ function sendEmail() {
 
   const subject = encodeURIComponent(`הזמנת ביגוד – קבוצה ${teamCode} – ${today}`);
 
+  const noteSection = orderNote ? `\nהערות להזמנה: ${orderNote}` : '';
+
   const body = encodeURIComponent(
 `שלום גרפיקל,
 
 מצורף סיכום הזמנת ביגוד עבור קבוצה: ${teamCode}
 תאריך: ${today}
-סה"כ שחקנים: ${total}
+סה"כ מספרים: ${total}${noteSection}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━
 כמויות לפי מידה:
@@ -1434,6 +1464,34 @@ ${rows}
   window.location.href = `mailto:grafikal@grafikal.co.il?subject=${subject}&body=${body}`;
   showToast('📧 פותח תוכנת מייל...');
 }
+
+/* ══════════════════ ORDER NOTE ══════════════════ */
+function loadOrderNote() {
+  if (IS_DEMO) {
+    orderNote = localStorage.getItem('eq_note_' + teamCode) || '';
+    document.getElementById('orderNoteArea').value = orderNote;
+  } else if (db) {
+    db.collection('teams').doc(teamCode).collection('meta').doc('note')
+      .get().then(doc => {
+        orderNote = doc.data()?.text || '';
+        document.getElementById('orderNoteArea').value = orderNote;
+      }).catch(() => {});
+  }
+}
+
+function saveOrderNote(text) {
+  orderNote = text;
+  if (IS_DEMO) {
+    localStorage.setItem('eq_note_' + teamCode, text);
+  } else if (db) {
+    db.collection('teams').doc(teamCode).collection('meta').doc('note')
+      .set({text}).catch(() => {});
+  }
+}
+
+document.getElementById('orderNoteArea').addEventListener('blur', function() {
+  saveOrderNote(this.value);
+});
 
 /* ══════════════════ HELPERS ══════════════════ */
 function setConn(type, text) {
