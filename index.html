@@ -292,7 +292,7 @@
       border-bottom: 1px solid var(--gray-200);
     }
 
-    .picker-wrap.open { max-height: 210px; }
+    .picker-wrap.open { max-height: 300px; }
 
     /* locked state */
     .pk-locked {
@@ -535,6 +535,50 @@
       font-weight: 600;
     }
 
+    /* ── QUANTITY (in picker & cell) ── */
+    .pk-qty-row {
+      margin-top: 9px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .pk-qty-label {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--gray-700);
+      white-space: nowrap;
+    }
+
+    .pk-qty-btns { display: flex; gap: 5px; }
+
+    .qty-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius);
+      border: 1.5px solid var(--gray-300);
+      background: var(--white);
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      color: var(--gray-700);
+      font-family: 'Rubik', sans-serif;
+      transition: all 0.1s;
+    }
+
+    .qty-btn:hover { border-color: var(--blue); color: var(--blue); }
+    .qty-btn.active { background: var(--blue); color: var(--white); border-color: var(--blue); }
+
+    .cell-qty {
+      position: absolute;
+      top: 2px;
+      right: 3px;
+      font-size: 9px;
+      font-weight: 700;
+      color: var(--blue);
+      line-height: 1;
+    }
+
     /* ── NOTE INPUT (in picker) ── */
     .pk-note-row { margin-top: 8px; }
 
@@ -681,6 +725,10 @@
         <button class="btn btn-gray" style="padding: 6px 11px; font-size: 13px; color: var(--gray-400);" onclick="closePk()">✕ סגור</button>
       </div>
       <div class="pk-sizes" id="szBtns"></div>
+      <div class="pk-qty-row">
+        <span class="pk-qty-label">כמות:</span>
+        <div class="pk-qty-btns" id="qtyBtns"></div>
+      </div>
       <div class="pk-note-row">
         <input type="text" id="noteInput" class="pk-note-input" placeholder="📝 הערה לספק (אופציונלי)" maxlength="80">
       </div>
@@ -796,6 +844,22 @@ if (IS_DEMO) {
   wrap.appendChild(clr);
 })();
 
+// Build quantity buttons once
+(function buildQtyButtons() {
+  const wrap = document.getElementById('qtyBtns');
+  [1,2,3,4,5].forEach(q => {
+    const b = document.createElement('button');
+    b.className = 'qty-btn' + (q === 1 ? ' active' : '');
+    b.id = 'qtyb_' + q;
+    b.textContent = q;
+    b.onclick = () => {
+      document.querySelectorAll('.qty-btn').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+    };
+    wrap.appendChild(b);
+  });
+})();
+
 // Auto-login if URL param or localStorage
 window.addEventListener('DOMContentLoaded', () => {
   const urlCode = new URLSearchParams(location.search).get('team');
@@ -905,7 +969,7 @@ function initFirebase() {
       const newData = {};
       snap.forEach(doc => {
         const d = doc.data();
-        if (d.size) newData[+doc.id] = {size: d.size, locked: !!d.locked, note: d.note || ''};
+        if (d.size) newData[+doc.id] = {size: d.size, locked: !!d.locked, note: d.note || '', qty: d.qty || 1};
       });
       data = newData;
 
@@ -1006,8 +1070,10 @@ function render() {
       cnt++;
     }
 
+    const qty = e?.qty || 1;
     cell.innerHTML =
       (lk  ? '<span class="cell-lk">🔒</span>' : '') +
+      (has && qty > 1 ? `<span class="cell-qty">×${qty}</span>` : '') +
       `<div class="cell-num">${n}</div>` +
       (has
         ? `<div class="cell-badge" style="background:${SZ_HEX[e.size]}">${e.size}</div>`
@@ -1063,6 +1129,11 @@ function openPk(n) {
     document.getElementById('pkNum').textContent = n;
     document.getElementById('lkChk').checked = false;
     document.getElementById('noteInput').value = e?.note || '';
+    // Set qty selection
+    const curQty = Math.min(e?.qty || 1, 5);
+    document.querySelectorAll('.qty-btn').forEach(x => x.classList.remove('active'));
+    const qb = document.getElementById('qtyb_' + curQty);
+    if (qb) qb.classList.add('active');
     SIZES.forEach(sz => {
       const b = document.getElementById('szb_' + sz);
       if (b) b.classList.toggle('active', e?.size === sz);
@@ -1086,7 +1157,9 @@ function assignSize(sz) {
   if (sel === null) return;
   const lock = document.getElementById('lkChk').checked;
   const note = document.getElementById('noteInput').value.trim();
-  applySize(sel, sz ? {size: sz, locked: lock, note} : null);
+  const qtyActive = document.querySelector('.qty-btn.active');
+  const qty = qtyActive ? +qtyActive.textContent : 1;
+  applySize(sel, sz ? {size: sz, locked: lock, note, qty} : null);
   closePk();
 }
 
@@ -1179,8 +1252,10 @@ function renderSum() {
   const total = Object.values(data).filter(d => d?.size).length;
   const today = new Date().toLocaleDateString('he-IL', {day:'numeric', month:'long', year:'numeric'});
 
+  const totalUnits = Object.values(data).filter(d => d?.size).reduce((s, d) => s + (d.qty || 1), 0);
+  const unitsExtra = totalUnits > total ? ` • <strong>${totalUnits} יחידות</strong>` : '';
   document.getElementById('sumInfo').innerHTML =
-    `סה"כ <strong>${total} שחקנים</strong> עם מידות מוגדרות — ${today}`;
+    `סה"כ <strong>${total} מספרים</strong>${unitsExtra} — ${today}`;
 
   if (!total) {
     document.getElementById('sumGroups').innerHTML =
@@ -1195,12 +1270,14 @@ function renderSum() {
         <div class="sum-grp-hdr" style="color:${SZ_HEX[sz]}">
           <div class="dot" style="background:${SZ_HEX[sz]}"></div>
           ${sz}
-          <span class="sum-grp-cnt">${g[sz].length} שחקנים</span>
+          <span class="sum-grp-cnt">${g[sz].reduce((s,n) => s+(data[n]?.qty||1), 0)} יחידות</span>
         </div>
         <div class="sum-nums">
           ${g[sz].map(n => {
             const note = data[n]?.note;
-            return `<div class="sum-num">#${n}${note ? `<span class="sum-note-text">${note}</span>` : ''}</div>`;
+            const qty  = data[n]?.qty || 1;
+            return `<div class="sum-num">#${n}${qty>1?` <strong style="color:var(--blue)">×${qty}</strong>`:''}`
+              + `${note ? `<span class="sum-note-text">${note}</span>` : ''}</div>`;
           }).join('')}
         </div>
       </div>`)
@@ -1222,7 +1299,8 @@ function buildExportDOM() {
         <div style="display:flex;flex-wrap:wrap;gap:5px;">
           ${g[sz].map(n => {
             const note = data[n]?.note;
-            return `<span style="font-size:14px;font-weight:700;padding:3px 9px;border-radius:5px;color:${SZ_HEX[sz]};border:1.5px solid ${SZ_HEX[sz]}55;background:${SZ_BG_HEX[sz]}">#${n}${note ? `<span style="font-size:11px;font-weight:400;display:block;color:#64748b">${note}</span>` : ''}</span>`;
+            const qty  = data[n]?.qty || 1;
+            return `<span style="font-size:14px;font-weight:700;padding:3px 9px;border-radius:5px;color:${SZ_HEX[sz]};border:1.5px solid ${SZ_HEX[sz]}55;background:${SZ_BG_HEX[sz]}">#${n}${qty>1?` <span style="color:#2563a8">×${qty}</span>`:''}${note ? `<span style="font-size:11px;font-weight:400;display:block;color:#64748b">${note}</span>` : ''}</span>`;
           }).join('')}
         </div>
       </div>`)
@@ -1305,14 +1383,16 @@ function sendEmail() {
   // Size quantities row (matching supplier table columns: S M L XL XXL XXXL/3XL)
   const sizeMap = { XS: 'XS', S: 'S', M: 'M', L: 'L', XL: 'XL', XXL: 'XXL', XXXL: '3XL' };
   const qtys = SIZES.map(sz => {
-    const cnt = g[sz].length;
-    return cnt > 0 ? `${sizeMap[sz]}=${cnt}` : '';
+    const units = g[sz].reduce((s, n) => s + (data[n]?.qty || 1), 0);
+    return units > 0 ? `${sizeMap[sz]}=${units}` : '';
   }).filter(Boolean).join('  |  ');
+  const totalUnits = entries.reduce((s, e) => s + (data[e.n]?.qty || 1), 0);
 
   // Number → size table (grouped in rows of 15 like the supplier form)
   const rows = entries.map(e => {
+    const qty  = data[e.n]?.qty > 1 ? ` ×${data[e.n].qty}` : '';
     const note = data[e.n]?.note ? `  ← ${data[e.n].note}` : '';
-    return `${String(e.n).padStart(2, ' ')}  |  ${e.size}${note}`;
+    return `${String(e.n).padStart(2, ' ')}  |  ${e.size}${qty}${note}`;
   }).join('\n');
 
   // Size groups text
@@ -1334,7 +1414,7 @@ function sendEmail() {
 כמויות לפי מידה:
 ━━━━━━━━━━━━━━━━━━━━━━━━
 ${qtys}
-סה"כ: ${total} יחידות
+סה"כ: ${totalUnits} יחידות (${total} מספרים)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━
 פירוט מידות לפי קבוצה:
