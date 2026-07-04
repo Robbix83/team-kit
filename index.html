@@ -292,7 +292,7 @@
       border-bottom: 1px solid var(--gray-200);
     }
 
-    .picker-wrap.open { max-height: 300px; }
+    .picker-wrap.open { max-height: 360px; }
 
     /* locked state */
     .pk-locked {
@@ -535,6 +535,33 @@
       font-weight: 600;
     }
 
+    /* ── GOALKEEPER ── */
+    .pk-gk-row { margin-top: 9px; }
+
+    .gk-btn {
+      padding: 8px 16px;
+      border-radius: var(--radius);
+      border: 1.5px solid #f97316;
+      background: #fff7ed;
+      color: #c2410c;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: 'Rubik', sans-serif;
+      transition: all 0.12s;
+    }
+
+    .gk-btn:hover { background: #ffedd5; }
+    .gk-btn.active { background: #f97316; color: #fff; border-color: #f97316; }
+
+    .cell-gk {
+      font-size: 9px;
+      font-weight: 800;
+      color: #f97316;
+      line-height: 1;
+      margin-bottom: 1px;
+    }
+
     /* ── QUANTITY (in picker & cell) ── */
     .pk-qty-row {
       margin-top: 9px;
@@ -749,6 +776,9 @@
       <div class="pk-qty-row">
         <span class="pk-qty-label">כמות:</span>
         <div class="pk-qty-btns" id="qtyBtns"></div>
+      </div>
+      <div class="pk-gk-row">
+        <button id="gkBtn" class="gk-btn" onclick="toggleGk()">🧤 שוער</button>
       </div>
       <div class="pk-lock-row">
         <label class="pk-lock-lbl">
@@ -977,6 +1007,23 @@ function saveDemo() {
   try { localStorage.setItem('eq_data_' + teamCode, JSON.stringify(data)); } catch(e) {}
 }
 
+/* ══════════════════ CACHE (always persisted, even in Firebase mode) ══════════════════ */
+function saveCache() {
+  try { localStorage.setItem('eq_cache_' + teamCode, JSON.stringify(data)); } catch(e) {}
+}
+
+function loadCache() {
+  try {
+    const raw = localStorage.getItem('eq_cache_' + teamCode);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    const fixed = {};
+    Object.keys(parsed).forEach(k => { fixed[+k] = parsed[k]; });
+    data = fixed;
+    render();
+  } catch(e) {}
+}
+
 /* ══════════════════ FIREBASE ══════════════════ */
 function initFirebase() {
   try {
@@ -986,6 +1033,9 @@ function initFirebase() {
 
     const ref = db.collection('teams').doc(teamCode).collection('sizes');
 
+    // Show cached data immediately so page isn't blank while Firestore loads
+    loadCache();
+
     unsubscribe = ref.onSnapshot(snap => {
       document.getElementById('loadingOverlay').style.display = 'none';
       setConn('ok', '🟢 מחובר');
@@ -993,9 +1043,10 @@ function initFirebase() {
       const newData = {};
       snap.forEach(doc => {
         const d = doc.data();
-        if (d.size) newData[+doc.id] = {size: d.size, locked: !!d.locked, qty: d.qty || 1};
+        if (d.size) newData[+doc.id] = {size: d.size, locked: !!d.locked, qty: d.qty || 1, gk: !!d.gk};
       });
       data = newData;
+      saveCache();
 
       render();
       if (sumOpen) renderSum();
@@ -1043,28 +1094,27 @@ function fsClearAll() {
 function applySize(num, sizeData) {
   if (sizeData === null) {
     delete data[num];
-    if (!IS_DEMO) fsDelete(num);
+    if (IS_DEMO) { saveDemo(); } else { fsDelete(num); }
   } else {
     data[num] = sizeData;
-    if (!IS_DEMO) fsSet(num, sizeData);
+    if (IS_DEMO) { saveDemo(); } else { fsSet(num, sizeData); }
   }
 
-  if (IS_DEMO) {
-    saveDemo();
-    render();
-    if (sumOpen) renderSum();
-  }
-  // Firestore mode: onSnapshot will update UI
+  saveCache();
+  render();
+  if (sumOpen) renderSum();
 }
 
 function applyLocked(num, locked) {
   if (!data[num]) return;
   data[num].locked = locked;
+  saveCache();
 
   if (IS_DEMO) {
     saveDemo();
     render();
   } else {
+    render();
     db.collection('teams').doc(teamCode).collection('sizes').doc(String(num))
       .update({locked})
       .catch(() => showToast('שגיאה בשמירה'));
@@ -1081,6 +1131,7 @@ function render() {
     const e   = data[n];
     const has = !!e?.size;
     const lk  = !!e?.locked;
+    const isGk = !!e?.gk;
     const isSel = sel === n;
 
     const cell = document.createElement('div');
@@ -1099,6 +1150,7 @@ function render() {
     cell.innerHTML =
       (lk  ? '<span class="cell-lk">🔒</span>' : '') +
       (has && qty > 1 ? `<span class="cell-qty">×${qty}</span>` : '') +
+      (isGk ? '<div class="cell-gk">🧤 שוער</div>' : '') +
       `<div class="cell-num">${n}</div>` +
       (has
         ? `<div class="cell-badge" style="background:${SZ_HEX[e.size]}">${e.size}</div>`
@@ -1153,6 +1205,9 @@ function openPk(n) {
     pkNormal.style.display = 'block';
     document.getElementById('pkNum').textContent = n;
     document.getElementById('lkChk').checked = false;
+    // Set GK button state
+    const gkBtn = document.getElementById('gkBtn');
+    if (gkBtn) gkBtn.classList.toggle('active', !!e?.gk);
     // Set qty selection
     const curQty = Math.min(e?.qty || 1, 5);
     document.querySelectorAll('.qty-btn').forEach(x => x.classList.remove('active'));
@@ -1193,11 +1248,34 @@ function unlockSel() {
   render();
 }
 
+function toggleGk() {
+  if (sel === null) return;
+  if (!data[sel]) data[sel] = {size: null, locked: false, qty: 1, gk: false};
+  const newGk = !data[sel].gk;
+  data[sel].gk = newGk;
+  saveCache();
+
+  const gkBtn = document.getElementById('gkBtn');
+  if (gkBtn) gkBtn.classList.toggle('active', newGk);
+
+  if (IS_DEMO) {
+    saveDemo();
+  } else if (db) {
+    db.collection('teams').doc(teamCode).collection('sizes').doc(String(sel))
+      .set({gk: newGk, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}, {merge: true})
+      .catch(() => showToast('שגיאה בשמירה'));
+  }
+
+  render();
+  showToast(newGk ? `🧤 מספר ${sel} סומן כשוער` : `מספר ${sel} הוסר מסימון שוער`);
+}
+
 /* ══════════════════ LOCK ALL ══════════════════ */
 function lockAll() {
   const shouldLock = Object.values(data).some(d => d && !d.locked);
 
   Object.keys(data).forEach(n => { if (data[n]) data[n].locked = shouldLock; });
+  saveCache();
   render();
   if (sel !== null) openPk(sel);
 
@@ -1240,6 +1318,7 @@ function doClear() {
   cancelClear();
   closePk();
   data = {};
+  saveCache();
   render();
   if (sumOpen) renderSum();
 
@@ -1299,7 +1378,8 @@ function renderSum() {
           ${g[sz].map(n => {
             const note = data[n]?.note;
             const qty  = data[n]?.qty || 1;
-            return `<div class="sum-num">#${n}${qty>1?` <strong style="color:var(--blue)">×${qty}</strong>`:''}`
+            const isGk = !!data[n]?.gk;
+            return `<div class="sum-num">#${n}${isGk?' 🧤':''}${qty>1?` <strong style="color:var(--blue)">×${qty}</strong>`:''}`
               + `${note ? `<span class="sum-note-text">${note}</span>` : ''}</div>`;
           }).join('')}
         </div>
@@ -1323,7 +1403,8 @@ function buildExportDOM() {
           ${g[sz].map(n => {
             const note = data[n]?.note;
             const qty  = data[n]?.qty || 1;
-            return `<span style="font-size:14px;font-weight:700;padding:3px 9px;border-radius:5px;color:${SZ_HEX[sz]};border:1.5px solid ${SZ_HEX[sz]}55;background:${SZ_BG_HEX[sz]}">#${n}${qty>1?` <span style="color:#2563a8">×${qty}</span>`:''}${note ? `<span style="font-size:11px;font-weight:400;display:block;color:#64748b">${note}</span>` : ''}</span>`;
+            const isGk = !!data[n]?.gk;
+            return `<span style="font-size:14px;font-weight:700;padding:3px 9px;border-radius:5px;color:${SZ_HEX[sz]};border:1.5px solid ${SZ_HEX[sz]}55;background:${SZ_BG_HEX[sz]}">#${n}${isGk?' 🧤':''}${qty>1?` <span style="color:#2563a8">×${qty}</span>`:''}${note ? `<span style="font-size:11px;font-weight:400;display:block;color:#64748b">${note}</span>` : ''}</span>`;
           }).join('')}
         </div>
       </div>`)
@@ -1419,8 +1500,9 @@ function sendEmail() {
   // Number → size table (grouped in rows of 15 like the supplier form)
   const rows = entries.map(e => {
     const qty  = data[e.n]?.qty > 1 ? ` ×${data[e.n].qty}` : '';
+    const isGk = data[e.n]?.gk ? ' 🧤שוער' : '';
     const note = data[e.n]?.note ? `  ← ${data[e.n].note}` : '';
-    return `${String(e.n).padStart(2, ' ')}  |  ${e.size}${qty}${note}`;
+    return `${String(e.n).padStart(2, ' ')}  |  ${e.size}${qty}${isGk}${note}`;
   }).join('\n');
 
   // Size groups text
