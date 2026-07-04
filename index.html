@@ -535,6 +535,34 @@
       font-weight: 600;
     }
 
+    /* ── NOTE INPUT (in picker) ── */
+    .pk-note-row { margin-top: 8px; }
+
+    .pk-note-input {
+      width: 100%;
+      padding: 8px 12px;
+      font-size: 14px;
+      border: 1.5px solid var(--gray-200);
+      border-radius: var(--radius);
+      font-family: 'Rubik', sans-serif;
+      outline: none;
+      direction: rtl;
+      transition: border-color 0.2s;
+      color: var(--gray-800);
+    }
+
+    .pk-note-input:focus { border-color: var(--blue); }
+    .pk-note-input::placeholder { color: var(--gray-400); }
+
+    /* ── NOTE in summary ── */
+    .sum-note-text {
+      font-size: 11px;
+      color: var(--gray-500);
+      font-weight: 400;
+      display: block;
+      margin-top: 1px;
+    }
+
     /* ── EXPORT TARGET (off-screen for html2canvas) ── */
     #exportTarget {
       position: fixed;
@@ -653,6 +681,9 @@
         <button class="btn btn-gray" style="padding: 6px 11px; font-size: 13px; color: var(--gray-400);" onclick="closePk()">✕ סגור</button>
       </div>
       <div class="pk-sizes" id="szBtns"></div>
+      <div class="pk-note-row">
+        <input type="text" id="noteInput" class="pk-note-input" placeholder="📝 הערה לספק (אופציונלי)" maxlength="80">
+      </div>
       <div class="pk-lock-row">
         <label class="pk-lock-lbl">
           <input type="checkbox" id="lkChk">
@@ -780,6 +811,18 @@ document.getElementById('codeInput').addEventListener('keydown', e => {
   if (e.key === 'Enter') enterTeam();
 });
 
+document.getElementById('noteInput').addEventListener('blur', function() {
+  if (sel === null || !data[sel]) return;
+  const note = this.value.trim();
+  if (note === (data[sel].note || '')) return;
+  data[sel].note = note;
+  if (IS_DEMO) { saveDemo(); }
+  else if (db) {
+    db.collection('teams').doc(teamCode).collection('sizes').doc(String(sel))
+      .update({note}).catch(() => {});
+  }
+});
+
 /* ══════════════════ LOGIN / LOGOUT ══════════════════ */
 function enterTeam() {
   const raw = document.getElementById('codeInput').value.trim().toUpperCase().replace(/\s+/g, '_');
@@ -862,7 +905,7 @@ function initFirebase() {
       const newData = {};
       snap.forEach(doc => {
         const d = doc.data();
-        if (d.size) newData[+doc.id] = {size: d.size, locked: !!d.locked};
+        if (d.size) newData[+doc.id] = {size: d.size, locked: !!d.locked, note: d.note || ''};
       });
       data = newData;
 
@@ -1019,6 +1062,7 @@ function openPk(n) {
     pkNormal.style.display = 'block';
     document.getElementById('pkNum').textContent = n;
     document.getElementById('lkChk').checked = false;
+    document.getElementById('noteInput').value = e?.note || '';
     SIZES.forEach(sz => {
       const b = document.getElementById('szb_' + sz);
       if (b) b.classList.toggle('active', e?.size === sz);
@@ -1041,7 +1085,8 @@ function closePk() {
 function assignSize(sz) {
   if (sel === null) return;
   const lock = document.getElementById('lkChk').checked;
-  applySize(sel, sz ? {size: sz, locked: lock} : null);
+  const note = document.getElementById('noteInput').value.trim();
+  applySize(sel, sz ? {size: sz, locked: lock, note} : null);
   closePk();
 }
 
@@ -1056,11 +1101,12 @@ function unlockSel() {
 function lockAll() {
   const shouldLock = Object.values(data).some(d => d && !d.locked);
 
+  Object.keys(data).forEach(n => { if (data[n]) data[n].locked = shouldLock; });
+  render();
+  if (sel !== null) openPk(sel);
+
   if (IS_DEMO) {
-    Object.keys(data).forEach(n => { if (data[n]) data[n].locked = shouldLock; });
     saveDemo();
-    render();
-    if (sel !== null) openPk(sel);
   } else {
     if (!db) return;
     Object.keys(data).forEach(n => {
@@ -1098,11 +1144,11 @@ function doClear() {
   cancelClear();
   closePk();
   data = {};
+  render();
+  if (sumOpen) renderSum();
 
   if (IS_DEMO) {
     saveDemo();
-    render();
-    if (sumOpen) renderSum();
   } else {
     fsClearAll();
   }
@@ -1152,7 +1198,10 @@ function renderSum() {
           <span class="sum-grp-cnt">${g[sz].length} שחקנים</span>
         </div>
         <div class="sum-nums">
-          ${g[sz].map(n => `<div class="sum-num">#${n}</div>`).join('')}
+          ${g[sz].map(n => {
+            const note = data[n]?.note;
+            return `<div class="sum-num">#${n}${note ? `<span class="sum-note-text">${note}</span>` : ''}</div>`;
+          }).join('')}
         </div>
       </div>`)
     .join('');
@@ -1171,9 +1220,10 @@ function buildExportDOM() {
         <div style="min-width:54px;font-size:18px;font-weight:700;color:${SZ_HEX[sz]};font-family:monospace;">${sz}</div>
         <div style="font-size:13px;color:#64748b;min-width:72px;padding-top:3px;">${g[sz].length} שחקנים</div>
         <div style="display:flex;flex-wrap:wrap;gap:5px;">
-          ${g[sz].map(n =>
-            `<span style="font-size:14px;font-weight:700;padding:3px 9px;border-radius:5px;color:${SZ_HEX[sz]};border:1.5px solid ${SZ_HEX[sz]}55;background:${SZ_BG_HEX[sz]}">#${n}</span>`
-          ).join('')}
+          ${g[sz].map(n => {
+            const note = data[n]?.note;
+            return `<span style="font-size:14px;font-weight:700;padding:3px 9px;border-radius:5px;color:${SZ_HEX[sz]};border:1.5px solid ${SZ_HEX[sz]}55;background:${SZ_BG_HEX[sz]}">#${n}${note ? `<span style="font-size:11px;font-weight:400;display:block;color:#64748b">${note}</span>` : ''}</span>`;
+          }).join('')}
         </div>
       </div>`)
     .join('');
@@ -1260,7 +1310,10 @@ function sendEmail() {
   }).filter(Boolean).join('  |  ');
 
   // Number → size table (grouped in rows of 15 like the supplier form)
-  const rows = entries.map(e => `${String(e.n).padStart(2, ' ')}  |  ${e.size}`).join('\n');
+  const rows = entries.map(e => {
+    const note = data[e.n]?.note ? `  ← ${data[e.n].note}` : '';
+    return `${String(e.n).padStart(2, ' ')}  |  ${e.size}${note}`;
+  }).join('\n');
 
   // Size groups text
   const sizeGroups = SIZES
