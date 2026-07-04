@@ -1,0 +1,1322 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#1e3a5f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>⚽ ניהול ביגוד קבוצה</title>
+
+  <!-- Firebase 10 compat (CDN) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <!-- html2canvas for PNG export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <!-- jsPDF for PDF export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <style>
+    /* ── RESET ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --blue-dark:  #1e3a5f;
+      --blue:       #2563a8;
+      --blue-light: #dbeafe;
+      --green:      #166534;
+      --green-bg:   #dcfce7;
+      --red:        #991b1b;
+      --red-bg:     #fee2e2;
+      --orange:     #92400e;
+      --gray-50:  #f8fafc;
+      --gray-100: #f1f5f9;
+      --gray-200: #e2e8f0;
+      --gray-300: #cbd5e1;
+      --gray-400: #94a3b8;
+      --gray-500: #64748b;
+      --gray-600: #475569;
+      --gray-700: #334155;
+      --gray-800: #1e293b;
+      --white: #ffffff;
+      --radius: 8px;
+
+      /* size palette */
+      --xs-c:#7c3aed; --xs-bg:#ede9fe;
+      --s-c: #1d4ed8; --s-bg: #dbeafe;
+      --m-c: #15803d; --m-bg: #dcfce7;
+      --l-c: #d97706; --l-bg: #fef3c7;
+      --xl-c:#c2410c; --xl-bg:#ffedd5;
+      --xxl-c:#b91c1c; --xxl-bg:#fee2e2;
+      --xxxl-c:#7f1d1d; --xxxl-bg:#fecaca;
+    }
+
+    body {
+      font-family: -apple-system, 'Segoe UI', Arial, sans-serif;
+      direction: rtl;
+      background: #ffffff;
+      min-height: 100dvh;
+      color: var(--gray-800);
+    }
+
+    /* ── LOGIN ── */
+    #loginScreen {
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: linear-gradient(150deg, #1e3a5f, #2563a8);
+    }
+
+    .login-card {
+      background: var(--white);
+      border-radius: 20px;
+      padding: 40px 32px;
+      width: 100%;
+      max-width: 400px;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+    }
+
+    .login-icon { font-size: 52px; margin-bottom: 12px; }
+    .login-title { font-size: 24px; font-weight: 700; color: var(--gray-800); margin-bottom: 6px; }
+    .login-sub { font-size: 14px; color: var(--gray-500); margin-bottom: 28px; line-height: 1.5; }
+
+    .login-lbl {
+      display: block;
+      text-align: right;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--gray-700);
+      margin-bottom: 8px;
+    }
+
+    .login-input {
+      width: 100%;
+      padding: 14px 16px;
+      font-size: 20px;
+      border: 2px solid var(--gray-200);
+      border-radius: var(--radius);
+      margin-bottom: 14px;
+      text-align: center;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      outline: none;
+      transition: border-color 0.2s;
+      font-family: 'Courier New', monospace;
+    }
+
+    .login-input:focus { border-color: var(--blue); }
+
+    .login-btn {
+      width: 100%;
+      padding: 15px;
+      background: var(--blue);
+      color: var(--white);
+      border: none;
+      border-radius: var(--radius);
+      font-size: 18px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .login-btn:hover { background: var(--blue-dark); }
+    .login-btn:active { transform: scale(0.98); }
+
+    .login-hint { font-size: 12px; color: var(--gray-400); margin-top: 14px; line-height: 1.5; }
+
+    .setup-notice {
+      background: #fef9c3;
+      border: 2px solid #facc15;
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      margin-bottom: 16px;
+      font-size: 13px;
+      color: #92400e;
+      display: none;
+      text-align: right;
+      line-height: 1.5;
+    }
+
+    /* ── LOADING OVERLAY ── */
+    #loadingOverlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+    }
+
+    .loading-box {
+      background: var(--white);
+      border-radius: 14px;
+      padding: 28px 36px;
+      text-align: center;
+      font-size: 15px;
+      color: var(--gray-700);
+    }
+
+    .spinner {
+      width: 38px;
+      height: 38px;
+      border: 3px solid var(--gray-200);
+      border-top-color: var(--blue);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 12px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── APP ── */
+    #app {
+      display: none;
+      max-width: 920px;
+      margin: 0 auto;
+      padding-bottom: 32px;
+    }
+
+    /* ── HEADER ── */
+    .app-hdr {
+      background: var(--blue-dark);
+      color: var(--white);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    .hdr-title { font-size: 18px; font-weight: 700; }
+    .hdr-sub { font-size: 12px; opacity: 0.65; margin-top: 1px; }
+
+    .hdr-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+    .conn-badge {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 14px;
+      white-space: nowrap;
+    }
+
+    .cb-ok      { background: rgba(22,163,74,.25);  color: #86efac; }
+    .cb-err     { background: rgba(220,38,38,.25);  color: #fca5a5; }
+    .cb-loading { background: rgba(217,119,6,.25);  color: #fcd34d; }
+
+    .stat-badge {
+      background: rgba(255,255,255,.15);
+      border-radius: 16px;
+      padding: 4px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .hdr-btn {
+      background: rgba(255,255,255,.12);
+      border: 1px solid rgba(255,255,255,.25);
+      color: var(--white);
+      border-radius: var(--radius);
+      padding: 6px 12px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+
+    .hdr-btn:hover { background: rgba(255,255,255,.22); }
+
+    /* ── ACTION BAR ── */
+    .action-bar {
+      background: var(--white);
+      border-bottom: 1px solid var(--gray-200);
+      padding: 9px 14px;
+      display: flex;
+      gap: 7px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .btn {
+      padding: 9px 15px;
+      border-radius: var(--radius);
+      border: 1.5px solid;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.12s;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+      font-family: inherit;
+    }
+
+    .btn:active { transform: scale(0.97); }
+
+    .btn-green  { background: var(--green-bg); color: var(--green);   border-color: #86efac; }
+    .btn-green:hover { background: #bbf7d0; }
+    .btn-gray   { background: var(--white);    color: var(--gray-600); border-color: var(--gray-300); }
+    .btn-gray:hover { background: var(--gray-50); border-color: var(--gray-400); }
+    .btn-red    { background: var(--white);    color: var(--red);     border-color: #fca5a5; }
+    .btn-red:hover { background: var(--red-bg); }
+    .btn-blue   { background: var(--blue);     color: var(--white);   border-color: var(--blue); }
+    .btn-blue:hover { background: var(--blue-dark); border-color: var(--blue-dark); }
+
+    .clr-confirm {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      color: var(--red);
+    }
+
+    .clr-confirm.show { display: flex; }
+
+    /* ── SIZE PICKER (in-flow, no fixed) ── */
+    .picker-wrap {
+      overflow: hidden;
+      max-height: 0;
+      transition: max-height 0.22s ease;
+      background: #eff6ff;
+      border-bottom: 1px solid var(--gray-200);
+    }
+
+    .picker-wrap.open { max-height: 210px; }
+
+    /* locked state */
+    .pk-locked {
+      display: none;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      flex-wrap: wrap;
+    }
+
+    .pk-locked.show { display: flex; }
+
+    .pk-locked-msg { font-size: 15px; color: var(--orange); flex: 1; min-width: 0; }
+    .pk-locked-msg strong { color: var(--gray-800); }
+
+    /* normal state */
+    .pk-normal { padding: 14px 16px; display: none; }
+
+    .pk-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--blue-dark);
+      margin-bottom: 11px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .pk-sizes { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
+
+    .sz-btn {
+      padding: 9px 14px;
+      border-radius: var(--radius);
+      border: 2px solid;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.1s;
+      font-family: 'Courier New', monospace;
+    }
+
+    .sz-btn:hover { filter: brightness(0.9); }
+    .sz-btn.active { outline: 3px solid rgba(37,99,168,.5); outline-offset: 2px; }
+
+    .sz-xs   { border-color: var(--xs-c);   color: var(--xs-c);   background: var(--xs-bg); }
+    .sz-s    { border-color: var(--s-c);    color: var(--s-c);    background: var(--s-bg); }
+    .sz-m    { border-color: var(--m-c);    color: var(--m-c);    background: var(--m-bg); }
+    .sz-l    { border-color: var(--l-c);    color: var(--l-c);    background: var(--l-bg); }
+    .sz-xl   { border-color: var(--xl-c);   color: var(--xl-c);   background: var(--xl-bg); }
+    .sz-xxl  { border-color: var(--xxl-c);  color: var(--xxl-c);  background: var(--xxl-bg); }
+    .sz-xxxl { border-color: var(--xxxl-c); color: var(--xxxl-c); background: var(--xxxl-bg); }
+
+    .sz-clear {
+      padding: 9px 12px;
+      border-radius: var(--radius);
+      border: 1.5px solid var(--gray-300);
+      font-size: 13px;
+      color: var(--gray-500);
+      cursor: pointer;
+      background: var(--white);
+      font-family: inherit;
+    }
+
+    .sz-clear:hover { background: var(--gray-100); }
+
+    .pk-lock-row {
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .pk-lock-lbl {
+      font-size: 13px;
+      color: var(--gray-600);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+
+    .pk-lock-lbl input { width: 15px; height: 15px; }
+
+    /* ── LEGEND ── */
+    .legend {
+      background: var(--white);
+      border-bottom: 1px solid var(--gray-200);
+      padding: 7px 14px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .leg { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--gray-600); }
+    .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .leg-hint { font-size: 11px; color: var(--gray-400); margin-right: auto; }
+
+    /* ── GRID ── */
+    .grid-wrap {
+      padding: 12px 14px 16px;
+      background: #ffffff;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(10, minmax(0, 1fr));
+      gap: 5px;
+    }
+
+    @media (max-width: 560px) {
+      .grid { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+    }
+
+    @media (max-width: 380px) {
+      .grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 3px; }
+    }
+
+    .cell {
+      background: var(--white);
+      border: 1.5px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 5px 2px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.12s, background 0.12s, opacity 0.12s;
+      min-height: 58px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+
+    @media (max-width: 560px) { .cell { min-height: 52px; } }
+    @media (max-width: 380px) { .cell { min-height: 64px; } }
+
+    .cell.empty { background: var(--gray-50); opacity: 0.5; }
+    .cell.empty:hover { opacity: 0.85; border-color: var(--gray-300); }
+    .cell:not(.empty):not(.locked):hover { border-color: var(--blue); }
+    .cell.selected { border-color: var(--blue) !important; border-width: 2px; }
+    .cell.locked { cursor: default; }
+
+    .cell-lk {
+      position: absolute;
+      top: 2px;
+      left: 3px;
+      font-size: 9px;
+    }
+
+    .cell-num {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--gray-800);
+      line-height: 1.1;
+    }
+
+    @media (max-width: 560px) { .cell-num { font-size: 15px; } }
+
+    .cell-badge {
+      margin-top: 3px;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 3px;
+      color: #fff;
+      font-family: 'Courier New', monospace;
+    }
+
+    .cell-dash { font-size: 11px; color: var(--gray-300); margin-top: 3px; }
+
+    /* ── SUMMARY PANEL ── */
+    .sum-panel {
+      background: var(--white);
+      border-top: 2px solid var(--gray-200);
+      display: none;
+      padding: 20px 16px;
+    }
+
+    .sum-panel.open { display: block; }
+
+    .sum-hdr {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 14px;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .sum-title { font-size: 18px; font-weight: 700; color: var(--gray-800); }
+    .sum-actions { display: flex; gap: 7px; flex-wrap: wrap; }
+
+    .sum-info {
+      background: var(--gray-50);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      margin-bottom: 14px;
+      font-size: 15px;
+      color: var(--gray-700);
+    }
+
+    .sum-groups {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
+      gap: 10px;
+    }
+
+    .sum-grp {
+      background: var(--gray-50);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+    }
+
+    .sum-grp-hdr {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 7px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .sum-grp-cnt { font-size: 12px; font-weight: 400; color: var(--gray-500); }
+
+    .sum-nums { display: flex; flex-wrap: wrap; gap: 4px; }
+
+    .sum-num {
+      font-size: 13px;
+      padding: 3px 8px;
+      background: var(--white);
+      border: 1px solid var(--gray-200);
+      border-radius: 5px;
+      color: var(--gray-700);
+      font-weight: 600;
+    }
+
+    /* ── EXPORT TARGET (off-screen for html2canvas) ── */
+    #exportTarget {
+      position: fixed;
+      left: -9999px;
+      top: 0;
+      width: 680px;
+      background: #ffffff;
+      padding: 28px 32px;
+      font-family: -apple-system, 'Segoe UI', Arial, sans-serif;
+      direction: rtl;
+      color: #1e293b;
+    }
+
+    /* ── TOAST ── */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--gray-800);
+      color: var(--white);
+      padding: 11px 20px;
+      border-radius: 24px;
+      font-size: 14px;
+      z-index: 300;
+      opacity: 0;
+      transition: opacity 0.25s;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+
+<!-- ════════════════ LOGIN ════════════════ -->
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-icon">⚽</div>
+    <h1 class="login-title">ניהול ביגוד קבוצה</h1>
+    <p class="login-sub">מידות שחקנים לפי מספר • סנכרון בין מכשירים<br>סיכום לייצוא לספק</p>
+
+    <div class="setup-notice" id="setupNotice">
+      ⚠️ <strong>מצב דמו:</strong> הכלי עובד עם localStorage בלבד.
+      לסנכרון אמיתי בין מכשירים, עדכן את הגדרות Firebase בתחתית הקוד.
+    </div>
+
+    <label class="login-lbl" for="codeInput">קוד קבוצה:</label>
+    <input
+      type="text"
+      id="codeInput"
+      class="login-input"
+      placeholder="EAGLES2025"
+      maxlength="20"
+      autocomplete="off"
+      spellcheck="false"
+      inputmode="text"
+    >
+    <button class="login-btn" onclick="enterTeam()">כנס ←</button>
+    <p class="login-hint">הקוד שמור — בפתיחה הבאה לא צריך להקליד שוב<br>שתף את הקישור עם אחרים בקבוצה</p>
+  </div>
+</div>
+
+<!-- ════════════════ APP ════════════════ -->
+<div id="app">
+
+  <!-- Loading overlay -->
+  <div id="loadingOverlay">
+    <div class="loading-box">
+      <div class="spinner"></div>
+      מתחבר לשרת...
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header class="app-hdr">
+    <div>
+      <div class="hdr-title">⚽ ניהול ביגוד קבוצה</div>
+      <div class="hdr-sub" id="teamLabel">קוד: —</div>
+    </div>
+    <div class="hdr-right">
+      <div class="conn-badge cb-loading" id="connBadge">מתחבר...</div>
+      <div class="stat-badge" id="statEl">0 שחקנים</div>
+      <button class="hdr-btn" onclick="exitApp()">החלף קבוצה</button>
+    </div>
+  </header>
+
+  <!-- Action bar -->
+  <div class="action-bar">
+    <button class="btn btn-green" onclick="toggleSum()">📋 סיכום לספק</button>
+    <button class="btn btn-gray"  onclick="lockAll()">🔒 נעל / שחרר הכל</button>
+    <div style="margin-right: auto; display: flex; align-items: center; gap: 7px;">
+      <button class="btn btn-red" id="clrBtn" onclick="askClear()">🗑️ נקה הכל</button>
+      <div class="clr-confirm" id="clrConfirm">
+        <span style="font-size:14px; color: var(--red);">אתה בטוח?</span>
+        <button class="btn btn-red"  style="padding: 6px 12px;" onclick="doClear()">כן, נקה</button>
+        <button class="btn btn-gray" style="padding: 6px 12px;" onclick="cancelClear()">ביטול</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Size picker panel (in-flow) -->
+  <div class="picker-wrap" id="pickerWrap">
+    <!-- Locked state -->
+    <div class="pk-locked" id="pkLocked">
+      <span style="font-size: 22px;">🔒</span>
+      <span class="pk-locked-msg">מספר <strong id="pkLockedNum"></strong> נעול — לא ניתן לשנות</span>
+      <button class="btn btn-gray" style="padding: 8px 13px;" onclick="unlockSel()">🔓 שחרר נעילה</button>
+      <button class="btn btn-gray" style="padding: 8px 11px; color: var(--gray-400);" onclick="closePk()">✕</button>
+    </div>
+    <!-- Normal state -->
+    <div class="pk-normal" id="pkNormal">
+      <div class="pk-title">
+        <span>מספר <span id="pkNum" style="font-family: monospace; font-size: 18px;"></span> — בחר מידה:</span>
+        <button class="btn btn-gray" style="padding: 6px 11px; font-size: 13px; color: var(--gray-400);" onclick="closePk()">✕ סגור</button>
+      </div>
+      <div class="pk-sizes" id="szBtns"></div>
+      <div class="pk-lock-row">
+        <label class="pk-lock-lbl">
+          <input type="checkbox" id="lkChk">
+          🔒 נעל מספר זה אחרי שמירה
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend">
+    <div class="leg"><div class="dot" style="background:var(--xs-c)"></div>XS</div>
+    <div class="leg"><div class="dot" style="background:var(--s-c)"></div>S</div>
+    <div class="leg"><div class="dot" style="background:var(--m-c)"></div>M</div>
+    <div class="leg"><div class="dot" style="background:var(--l-c)"></div>L</div>
+    <div class="leg"><div class="dot" style="background:var(--xl-c)"></div>XL</div>
+    <div class="leg"><div class="dot" style="background:var(--xxl-c)"></div>XXL</div>
+    <div class="leg"><div class="dot" style="background:var(--xxxl-c)"></div>XXXL</div>
+    <span class="leg-hint">לחץ ממושך על מספר לנעל / שחרר</span>
+  </div>
+
+  <!-- Numbers grid -->
+  <div class="grid-wrap">
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <!-- Summary panel -->
+  <div class="sum-panel" id="sumPanel">
+    <div class="sum-hdr">
+      <div class="sum-title">📋 סיכום לספק</div>
+      <div class="sum-actions">
+        <button class="btn btn-blue" onclick="exportPNG()">📸 יצא לתמונה</button>
+        <button class="btn btn-gray" onclick="exportPDF()">📄 יצא ל-PDF</button>
+        <button class="btn btn-gray" style="background:#f0fdf4;color:#166534;border-color:#86efac;" onclick="sendEmail()">📧 שלח למייל לגרפיקל</button>
+        <button class="btn btn-gray" style="color: var(--gray-400);" onclick="toggleSum()">✕ סגור</button>
+      </div>
+    </div>
+    <div class="sum-info" id="sumInfo">—</div>
+    <div class="sum-groups" id="sumGroups"></div>
+  </div>
+
+</div>
+
+<!-- Export target (hidden, off-screen, for html2canvas) -->
+<div id="exportTarget" aria-hidden="true"></div>
+
+<!-- Toast notification -->
+<div class="toast" id="toast"></div>
+
+<script>
+/* ════════════════════════════════════════════════════════════════
+   FIREBASE CONFIG
+   ─────────────────────────────────────────────────────────────
+   1. עבור ל: https://console.firebase.google.com
+   2. צור פרויקט → הוסף אפליקציית Web
+   3. העתק את ה-config לכאן
+   ════════════════════════════════════════════════════════════════ */
+const FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyAAX5gfowKdy1NmGpbWF1mkdoPpMw2AzM8",
+  authDomain:        "maccabi-netanya.firebaseapp.com",
+  projectId:         "maccabi-netanya",
+  storageBucket:     "maccabi-netanya.firebasestorage.app",
+  messagingSenderId: "709314315732",
+  appId:             "1:709314315732:web:afc99554d56361c1adc241"
+};
+
+/* ══════════════════ CONSTANTS ══════════════════ */
+const SIZES = ['XS','S','M','L','XL','XXL','XXXL'];
+
+// These must match the CSS variables values
+const SZ_HEX = {
+  XS:'#7c3aed', S:'#1d4ed8', M:'#15803d',
+  L:'#d97706',  XL:'#c2410c', XXL:'#b91c1c', XXXL:'#7f1d1d'
+};
+const SZ_BG_HEX = {
+  XS:'#ede9fe', S:'#dbeafe', M:'#dcfce7',
+  L:'#fef3c7',  XL:'#ffedd5', XXL:'#fee2e2', XXXL:'#fecaca'
+};
+
+const IS_DEMO = FIREBASE_CONFIG.apiKey === 'YOUR_API_KEY';
+
+/* ══════════════════ STATE ══════════════════ */
+let data       = {};  // { [num: number]: {size: string, locked: boolean} }
+let sel        = null;
+let sumOpen    = false;
+let teamCode   = '';
+let db         = null;
+let unsubscribe = null;
+
+/* ══════════════════ BOOT ══════════════════ */
+if (IS_DEMO) {
+  document.getElementById('setupNotice').style.display = 'block';
+}
+
+// Build size buttons once
+(function buildSizeButtons() {
+  const wrap = document.getElementById('szBtns');
+  SIZES.forEach(sz => {
+    const b = document.createElement('button');
+    b.className = `sz-btn sz-${sz.toLowerCase()}`;
+    b.id = 'szb_' + sz;
+    b.textContent = sz;
+    b.onclick = () => assignSize(sz);
+    wrap.appendChild(b);
+  });
+  const clr = document.createElement('button');
+  clr.className = 'sz-clear';
+  clr.innerHTML = '✕ נקה מידה';
+  clr.onclick = () => assignSize(null);
+  wrap.appendChild(clr);
+})();
+
+// Auto-login if URL param or localStorage
+window.addEventListener('DOMContentLoaded', () => {
+  const urlCode = new URLSearchParams(location.search).get('team');
+  const savedCode = localStorage.getItem('eq_teamCode');
+  const code = urlCode || savedCode;
+  if (code) {
+    document.getElementById('codeInput').value = code;
+    enterTeam();
+  }
+});
+
+document.getElementById('codeInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') enterTeam();
+});
+
+/* ══════════════════ LOGIN / LOGOUT ══════════════════ */
+function enterTeam() {
+  const raw = document.getElementById('codeInput').value.trim().toUpperCase().replace(/\s+/g, '_');
+  if (!raw || raw.length < 2) { showToast('נא להכניס קוד קבוצה'); return; }
+
+  teamCode = raw;
+  localStorage.setItem('eq_teamCode', teamCode);
+
+  document.getElementById('loginScreen').style.display   = 'none';
+  document.getElementById('app').style.display           = 'block';
+  document.getElementById('teamLabel').textContent       = 'קוד: ' + teamCode;
+
+  // Update URL without reload
+  try {
+    const u = new URL(location.href);
+    u.searchParams.set('team', teamCode);
+    history.replaceState(null, '', u.toString());
+  } catch(e) {}
+
+  IS_DEMO ? initDemo() : initFirebase();
+}
+
+function exitApp() {
+  if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+  data = {}; sel = null; sumOpen = false;
+  document.getElementById('app').style.display        = 'none';
+  document.getElementById('sumPanel').classList.remove('open');
+  document.getElementById('loginScreen').style.display = 'flex';
+  setConn('loading', 'מתחבר...');
+  // Reset loading overlay for next login
+  document.getElementById('loadingOverlay').style.display = 'flex';
+}
+
+/* ══════════════════ DEMO (localStorage) ══════════════════ */
+function initDemo() {
+  document.getElementById('loadingOverlay').style.display = 'none';
+  setConn('err', '⚠️ מצב דמו');
+
+  try {
+    const saved = localStorage.getItem('eq_data_' + teamCode);
+    data = saved ? JSON.parse(saved) : buildDemoData();
+  } catch(e) { data = buildDemoData(); }
+
+  // Convert string keys to numbers
+  const fixed = {};
+  Object.keys(data).forEach(k => { fixed[+k] = data[k]; });
+  data = fixed;
+
+  render();
+}
+
+function buildDemoData() {
+  return {
+    1: {size:'XL',  locked:true},  5: {size:'L',    locked:false},
+    7: {size:'M',   locked:true},  9: {size:'L',    locked:true},
+   10: {size:'S',   locked:false},11: {size:'M',    locked:false},
+   14: {size:'XS',  locked:false},17: {size:'XXL',  locked:false},
+   22: {size:'XL',  locked:true}, 23: {size:'M',    locked:false},
+   33: {size:'L',   locked:false},88: {size:'XXXL', locked:false}
+  };
+}
+
+function saveDemo() {
+  try { localStorage.setItem('eq_data_' + teamCode, JSON.stringify(data)); } catch(e) {}
+}
+
+/* ══════════════════ FIREBASE ══════════════════ */
+function initFirebase() {
+  try {
+    if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.firestore();
+    setConn('loading', 'מתחבר...');
+
+    const ref = db.collection('teams').doc(teamCode).collection('sizes');
+
+    unsubscribe = ref.onSnapshot(snap => {
+      document.getElementById('loadingOverlay').style.display = 'none';
+      setConn('ok', '🟢 מחובר');
+
+      const newData = {};
+      snap.forEach(doc => {
+        const d = doc.data();
+        if (d.size) newData[+doc.id] = {size: d.size, locked: !!d.locked};
+      });
+      data = newData;
+
+      render();
+      if (sumOpen) renderSum();
+    }, err => {
+      console.error('Firestore error:', err);
+      document.getElementById('loadingOverlay').style.display = 'none';
+      setConn('err', '🔴 שגיאת חיבור');
+      showToast('שגיאה בחיבור לשרת');
+    });
+
+  } catch(e) {
+    console.error('Firebase init error:', e);
+    document.getElementById('loadingOverlay').style.display = 'none';
+    setConn('err', '🔴 שגיאה');
+    showToast('שגיאה ב-Firebase — בדוק את ה-config');
+  }
+}
+
+function fsSet(num, payload) {
+  if (!db) return;
+  db.collection('teams').doc(teamCode).collection('sizes').doc(String(num))
+    .set({...payload, updatedAt: firebase.firestore.FieldValue.serverTimestamp()})
+    .catch(() => showToast('שגיאה בשמירה'));
+}
+
+function fsDelete(num) {
+  if (!db) return;
+  db.collection('teams').doc(teamCode).collection('sizes').doc(String(num))
+    .delete()
+    .catch(() => showToast('שגיאה במחיקה'));
+}
+
+function fsClearAll() {
+  if (!db) return;
+  db.collection('teams').doc(teamCode).collection('sizes').get().then(snap => {
+    if (snap.empty) return;
+    const batch = db.batch();
+    snap.forEach(doc => batch.delete(doc.ref));
+    return batch.commit();
+  }).catch(() => showToast('שגיאה בניקוי'));
+}
+
+/* ══════════════════ DATA OPS ══════════════════ */
+function applySize(num, sizeData) {
+  if (sizeData === null) {
+    delete data[num];
+    if (!IS_DEMO) fsDelete(num);
+  } else {
+    data[num] = sizeData;
+    if (!IS_DEMO) fsSet(num, sizeData);
+  }
+
+  if (IS_DEMO) {
+    saveDemo();
+    render();
+    if (sumOpen) renderSum();
+  }
+  // Firestore mode: onSnapshot will update UI
+}
+
+function applyLocked(num, locked) {
+  if (!data[num]) return;
+  data[num].locked = locked;
+
+  if (IS_DEMO) {
+    saveDemo();
+    render();
+  } else {
+    db.collection('teams').doc(teamCode).collection('sizes').doc(String(num))
+      .update({locked})
+      .catch(() => showToast('שגיאה בשמירה'));
+  }
+}
+
+/* ══════════════════ RENDER GRID ══════════════════ */
+function render() {
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  let cnt = 0;
+
+  for (let n = 1; n <= 99; n++) {
+    const e   = data[n];
+    const has = !!e?.size;
+    const lk  = !!e?.locked;
+    const isSel = sel === n;
+
+    const cell = document.createElement('div');
+    cell.className = 'cell' +
+      (!has      ? ' empty'    : '') +
+      (isSel     ? ' selected' : '') +
+      (lk        ? ' locked'   : '');
+
+    if (has) {
+      cell.style.borderColor = SZ_HEX[e.size] + '88';
+      cell.style.background  = SZ_BG_HEX[e.size] + '55';
+      cnt++;
+    }
+
+    cell.innerHTML =
+      (lk  ? '<span class="cell-lk">🔒</span>' : '') +
+      `<div class="cell-num">${n}</div>` +
+      (has
+        ? `<div class="cell-badge" style="background:${SZ_HEX[e.size]}">${e.size}</div>`
+        : '<div class="cell-dash">—</div>');
+
+    // Long-press (700ms) → toggle lock
+    let pressT;
+    function startLongPress() {
+      pressT = setTimeout(() => { pressT = null; tgLock(n); }, 700);
+    }
+    function cancelLongPress() {
+      if (pressT) { clearTimeout(pressT); pressT = null; }
+    }
+
+    cell.addEventListener('mousedown',  startLongPress);
+    cell.addEventListener('mouseup',    cancelLongPress);
+    cell.addEventListener('mouseleave', cancelLongPress);
+    cell.addEventListener('touchstart', startLongPress, {passive: true});
+    cell.addEventListener('touchend',   cancelLongPress);
+    cell.addEventListener('touchcancel',cancelLongPress);
+
+    cell.addEventListener('click', () => clickCell(n));
+
+    grid.appendChild(cell);
+  }
+
+  document.getElementById('statEl').textContent = cnt + ' שחקנים';
+}
+
+/* ══════════════════ PICKER ══════════════════ */
+function clickCell(n) {
+  if (sel === n) { closePk(); return; }
+  sel = n;
+  openPk(n);
+  render();
+}
+
+function openPk(n) {
+  const e  = data[n];
+  const lk = !!e?.locked;
+
+  document.getElementById('pickerWrap').classList.add('open');
+  const pkLocked = document.getElementById('pkLocked');
+  const pkNormal = document.getElementById('pkNormal');
+
+  if (lk) {
+    pkLocked.classList.add('show');
+    pkNormal.style.display = 'none';
+    document.getElementById('pkLockedNum').textContent = n;
+  } else {
+    pkLocked.classList.remove('show');
+    pkNormal.style.display = 'block';
+    document.getElementById('pkNum').textContent = n;
+    document.getElementById('lkChk').checked = false;
+    SIZES.forEach(sz => {
+      const b = document.getElementById('szb_' + sz);
+      if (b) b.classList.toggle('active', e?.size === sz);
+    });
+  }
+
+  setTimeout(() => {
+    document.getElementById('pickerWrap').scrollIntoView({behavior: 'smooth', block: 'nearest'});
+  }, 60);
+}
+
+function closePk() {
+  document.getElementById('pickerWrap').classList.remove('open');
+  document.getElementById('pkLocked').classList.remove('show');
+  document.getElementById('pkNormal').style.display = 'none';
+  sel = null;
+  render();
+}
+
+function assignSize(sz) {
+  if (sel === null) return;
+  const lock = document.getElementById('lkChk').checked;
+  applySize(sel, sz ? {size: sz, locked: lock} : null);
+  closePk();
+}
+
+function unlockSel() {
+  if (sel === null) return;
+  applyLocked(sel, false);
+  openPk(sel);
+  render();
+}
+
+/* ══════════════════ LOCK ALL ══════════════════ */
+function lockAll() {
+  const shouldLock = Object.values(data).some(d => d && !d.locked);
+
+  if (IS_DEMO) {
+    Object.keys(data).forEach(n => { if (data[n]) data[n].locked = shouldLock; });
+    saveDemo();
+    render();
+    if (sel !== null) openPk(sel);
+  } else {
+    if (!db) return;
+    Object.keys(data).forEach(n => {
+      if (data[n]) {
+        db.collection('teams').doc(teamCode).collection('sizes').doc(n)
+          .update({locked: shouldLock}).catch(() => {});
+      }
+    });
+  }
+
+  showToast(shouldLock ? '🔒 כל המספרים ננעלו' : '🔓 כל המספרים שוחררו');
+}
+
+function tgLock(n) {
+  if (!data[n]) return;
+  const newLk = !data[n].locked;
+  applyLocked(n, newLk);
+  showToast(newLk ? `🔒 מספר ${n} ננעל` : `🔓 מספר ${n} שוחרר`);
+  if (sel === n) openPk(n);
+  else render();
+}
+
+/* ══════════════════ CLEAR ALL ══════════════════ */
+function askClear() {
+  document.getElementById('clrBtn').style.display = 'none';
+  document.getElementById('clrConfirm').classList.add('show');
+}
+
+function cancelClear() {
+  document.getElementById('clrConfirm').classList.remove('show');
+  document.getElementById('clrBtn').style.display = '';
+}
+
+function doClear() {
+  cancelClear();
+  closePk();
+  data = {};
+
+  if (IS_DEMO) {
+    saveDemo();
+    render();
+    if (sumOpen) renderSum();
+  } else {
+    fsClearAll();
+  }
+
+  showToast('🗑️ כל המידות נמחקו');
+}
+
+/* ══════════════════ SUMMARY ══════════════════ */
+function toggleSum() {
+  sumOpen = !sumOpen;
+  document.getElementById('sumPanel').classList.toggle('open', sumOpen);
+  if (sumOpen) {
+    renderSum();
+    setTimeout(() => document.getElementById('sumPanel').scrollIntoView({behavior: 'smooth'}), 60);
+  }
+}
+
+function grouped() {
+  const g = {};
+  SIZES.forEach(s => g[s] = []);
+  Object.keys(data).forEach(n => { if (data[n]?.size) g[data[n].size].push(+n); });
+  SIZES.forEach(s => g[s].sort((a,b) => a-b));
+  return g;
+}
+
+function renderSum() {
+  const g     = grouped();
+  const total = Object.values(data).filter(d => d?.size).length;
+  const today = new Date().toLocaleDateString('he-IL', {day:'numeric', month:'long', year:'numeric'});
+
+  document.getElementById('sumInfo').innerHTML =
+    `סה"כ <strong>${total} שחקנים</strong> עם מידות מוגדרות — ${today}`;
+
+  if (!total) {
+    document.getElementById('sumGroups').innerHTML =
+      '<div style="color:#94a3b8;font-size:15px;padding:12px;text-align:center;">אין מידות מוגדרות עדיין</div>';
+    return;
+  }
+
+  document.getElementById('sumGroups').innerHTML = SIZES
+    .filter(sz => g[sz].length > 0)
+    .map(sz => `
+      <div class="sum-grp">
+        <div class="sum-grp-hdr" style="color:${SZ_HEX[sz]}">
+          <div class="dot" style="background:${SZ_HEX[sz]}"></div>
+          ${sz}
+          <span class="sum-grp-cnt">${g[sz].length} שחקנים</span>
+        </div>
+        <div class="sum-nums">
+          ${g[sz].map(n => `<div class="sum-num">#${n}</div>`).join('')}
+        </div>
+      </div>`)
+    .join('');
+}
+
+/* ══════════════════ EXPORT ══════════════════ */
+function buildExportDOM() {
+  const g     = grouped();
+  const total = Object.values(data).filter(d => d?.size).length;
+  const today = new Date().toLocaleDateString('he-IL', {day:'numeric', month:'long', year:'numeric'});
+
+  const groupsHTML = SIZES
+    .filter(sz => g[sz].length > 0)
+    .map(sz => `
+      <div style="display:flex;align-items:flex-start;gap:18px;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid #e2e8f0;">
+        <div style="min-width:54px;font-size:18px;font-weight:700;color:${SZ_HEX[sz]};font-family:monospace;">${sz}</div>
+        <div style="font-size:13px;color:#64748b;min-width:72px;padding-top:3px;">${g[sz].length} שחקנים</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;">
+          ${g[sz].map(n =>
+            `<span style="font-size:14px;font-weight:700;padding:3px 9px;border-radius:5px;color:${SZ_HEX[sz]};border:1.5px solid ${SZ_HEX[sz]}55;background:${SZ_BG_HEX[sz]}">#${n}</span>`
+          ).join('')}
+        </div>
+      </div>`)
+    .join('');
+
+  document.getElementById('exportTarget').innerHTML = `
+    <div style="border-bottom:3px solid #1e3a5f;padding-bottom:16px;margin-bottom:20px;">
+      <div style="font-size:26px;font-weight:700;color:#1e293b;">⚽ ניהול ביגוד קבוצה</div>
+      <div style="font-size:14px;color:#64748b;margin-top:5px;">
+        קוד קבוצה: <strong>${teamCode}</strong> &nbsp;|&nbsp; ${today} &nbsp;|&nbsp; סה"כ ${total} שחקנים
+      </div>
+    </div>
+    ${groupsHTML || '<div style="color:#94a3b8;font-size:15px;padding:20px;">אין מידות מוגדרות</div>'}
+    <div style="margin-top:20px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:11px;color:#94a3b8;text-align:center;">
+      הופק ע"י מערכת ניהול ביגוד קבוצה
+    </div>`;
+}
+
+async function exportPNG() {
+  if (!window.html2canvas) { showToast('הספרייה עדיין נטענת, נסה שוב'); return; }
+  if (!Object.values(data).some(d => d?.size)) { showToast('אין מידות לייצוא'); return; }
+
+  buildExportDOM();
+  showToast('⏳ מכין תמונה...');
+  await pause(120);
+
+  try {
+    const canvas = await html2canvas(document.getElementById('exportTarget'), {
+      backgroundColor: '#ffffff', scale: 2, useCORS: true, logging: false
+    });
+    const a = document.createElement('a');
+    a.download = 'ביגוד_' + teamCode + '.png';
+    a.href = canvas.toDataURL('image/png');
+    a.click();
+    showToast('✅ התמונה הורדה');
+  } catch(e) {
+    console.error(e);
+    showToast('שגיאה בייצוא התמונה');
+  }
+}
+
+async function exportPDF() {
+  if (!window.html2canvas || !window.jspdf) { showToast('הספרייה עדיין נטענת, נסה שוב'); return; }
+  if (!Object.values(data).some(d => d?.size)) { showToast('אין מידות לייצוא'); return; }
+
+  buildExportDOM();
+  showToast('⏳ מכין PDF...');
+  await pause(120);
+
+  try {
+    const canvas = await html2canvas(document.getElementById('exportTarget'), {
+      backgroundColor: '#ffffff', scale: 2, useCORS: true, logging: false
+    });
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pw = pdf.internal.pageSize.getWidth() - 20;
+    const ph = canvas.height * pw / canvas.width;
+    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 10, 10, pw, ph);
+    pdf.save('ביגוד_' + teamCode + '.pdf');
+    showToast('✅ ה-PDF הורד');
+  } catch(e) {
+    console.error(e);
+    showToast('שגיאה בייצוא ה-PDF');
+  }
+}
+
+/* ══════════════════ EMAIL TO SUPPLIER ══════════════════ */
+function sendEmail() {
+  const entries = Object.keys(data)
+    .map(n => ({ n: +n, ...data[n] }))
+    .filter(e => e.size)
+    .sort((a, b) => a.n - b.n);
+
+  if (!entries.length) { showToast('אין מידות לשליחה'); return; }
+
+  const today = new Date().toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const g = grouped();
+  const total = entries.length;
+
+  // Size quantities row (matching supplier table columns: S M L XL XXL XXXL/3XL)
+  const sizeMap = { XS: 'XS', S: 'S', M: 'M', L: 'L', XL: 'XL', XXL: 'XXL', XXXL: '3XL' };
+  const qtys = SIZES.map(sz => {
+    const cnt = g[sz].length;
+    return cnt > 0 ? `${sizeMap[sz]}=${cnt}` : '';
+  }).filter(Boolean).join('  |  ');
+
+  // Number → size table (grouped in rows of 15 like the supplier form)
+  const rows = entries.map(e => `${String(e.n).padStart(2, ' ')}  |  ${e.size}`).join('\n');
+
+  // Size groups text
+  const sizeGroups = SIZES
+    .filter(sz => g[sz].length > 0)
+    .map(sz => `${sizeMap[sz]}: ${g[sz].map(n => '#' + n).join(', ')}`)
+    .join('\n');
+
+  const subject = encodeURIComponent(`הזמנת ביגוד – קבוצה ${teamCode} – ${today}`);
+
+  const body = encodeURIComponent(
+`שלום גרפיקל,
+
+מצורף סיכום הזמנת ביגוד עבור קבוצה: ${teamCode}
+תאריך: ${today}
+סה"כ שחקנים: ${total}
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+כמויות לפי מידה:
+━━━━━━━━━━━━━━━━━━━━━━━━
+${qtys}
+סה"כ: ${total} יחידות
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+פירוט מידות לפי קבוצה:
+━━━━━━━━━━━━━━━━━━━━━━━━
+${sizeGroups}
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+טבלת מספר ↔ מידה:
+━━━━━━━━━━━━━━━━━━━━━━━━
+מס'  |  מידה
+${rows}
+
+בברכה,
+קבוצה ${teamCode}`
+  );
+
+  window.location.href = `mailto:grafikal@grafikal.co.il?subject=${subject}&body=${body}`;
+  showToast('📧 פותח תוכנת מייל...');
+}
+
+/* ══════════════════ HELPERS ══════════════════ */
+function setConn(type, text) {
+  const el = document.getElementById('connBadge');
+  el.textContent = text;
+  el.className = 'conn-badge cb-' + type;
+}
+
+function pause(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
+}
+
+// Initial render
+render();
+</script>
+</body>
+</html>
