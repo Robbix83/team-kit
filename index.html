@@ -435,6 +435,7 @@
 
     .cell.empty { background: var(--gray-50); opacity: 0.5; }
     .cell.empty:hover { opacity: 0.85; border-color: var(--gray-300); }
+    .cell.gk-mark { border-color: #f97316 !important; opacity: 1 !important; }
     .cell:not(.empty):not(.locked):hover { border-color: var(--blue); }
     .cell.selected { border-color: var(--blue) !important; border-width: 2px; }
     .cell.locked { cursor: default; }
@@ -555,11 +556,14 @@
     .gk-btn.active { background: #f97316; color: #fff; border-color: #f97316; }
 
     .cell-gk {
-      font-size: 9px;
+      font-size: 10px;
       font-weight: 800;
-      color: #f97316;
-      line-height: 1;
-      margin-bottom: 1px;
+      color: #fff;
+      background: #f97316;
+      border-radius: 3px;
+      padding: 1px 4px;
+      line-height: 1.3;
+      margin-bottom: 2px;
     }
 
     /* ── QUANTITY (in picker & cell) ── */
@@ -655,6 +659,48 @@
 
     .sum-note-area:focus { border-color: var(--blue); }
 
+    /* ── GK SECTION IN SUMMARY ── */
+    .sum-gk-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+      padding: 10px 14px;
+      background: #fff7ed;
+      border: 1px solid #fed7aa;
+      border-radius: var(--radius);
+    }
+
+    .sum-gk-label {
+      font-size: 13px;
+      font-weight: 700;
+      color: #c2410c;
+      white-space: nowrap;
+    }
+
+    .sum-gk-num {
+      font-size: 13px;
+      font-weight: 700;
+      padding: 2px 8px;
+      background: #f97316;
+      color: #fff;
+      border-radius: 12px;
+    }
+
+    /* ── CONN RETRY ── */
+    .conn-retry {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      border: 1px solid #f87171;
+      background: #fee2e2;
+      color: #991b1b;
+      cursor: pointer;
+      font-family: 'Rubik', sans-serif;
+      font-weight: 600;
+    }
+
     /* ── EXPORT TARGET (off-screen for html2canvas) ── */
     #exportTarget {
       position: fixed;
@@ -738,6 +784,7 @@
     </div>
     <div class="hdr-right">
       <div class="conn-badge cb-loading" id="connBadge">מתחבר...</div>
+      <button class="conn-retry" id="retryBtn" style="display:none;" onclick="retryConn()">חבר מחדש</button>
       <div class="stat-badge" id="statEl">0 שחקנים</div>
       <button class="hdr-btn" onclick="exitApp()">החלף קבוצה</button>
     </div>
@@ -822,6 +869,7 @@
       <label class="sum-note-lbl">📝 הערות להזמנה (לספק):</label>
       <textarea id="orderNoteArea" class="sum-note-area" placeholder="הוסף הערות לספק כאן... (סוג בד, שינויים מיוחדים, הוראות הדפסה...)"></textarea>
     </div>
+    <div id="sumGkRow" class="sum-gk-row" style="display:none;"></div>
     <div class="sum-groups" id="sumGroups"></div>
   </div>
 
@@ -873,6 +921,7 @@ let teamCode   = '';
 let db         = null;
 let unsubscribe = null;
 let orderNote  = '';
+let _noteLoaded = false;
 
 /* ══════════════════ BOOT ══════════════════ */
 if (IS_DEMO) {
@@ -963,7 +1012,7 @@ function enterTeam() {
 
 function exitApp() {
   if (unsubscribe) { unsubscribe(); unsubscribe = null; }
-  data = {}; sel = null; sumOpen = false; orderNote = '';
+  data = {}; sel = null; sumOpen = false; orderNote = ''; _noteLoaded = false;
   document.getElementById('orderNoteArea').value = '';
   document.getElementById('app').style.display        = 'none';
   document.getElementById('sumPanel').classList.remove('open');
@@ -1050,7 +1099,7 @@ function initFirebase() {
 
       render();
       if (sumOpen) renderSum();
-      loadOrderNote();
+      if (!_noteLoaded) { _noteLoaded = true; loadOrderNote(); }
     }, err => {
       console.error('Firestore error:', err);
       document.getElementById('loadingOverlay').style.display = 'none';
@@ -1109,12 +1158,10 @@ function applyLocked(num, locked) {
   if (!data[num]) return;
   data[num].locked = locked;
   saveCache();
+  render();
 
-  if (IS_DEMO) {
-    saveDemo();
-    render();
-  } else {
-    render();
+  if (IS_DEMO) { saveDemo(); }
+  else {
     db.collection('teams').doc(teamCode).collection('sizes').doc(String(num))
       .update({locked})
       .catch(() => showToast('שגיאה בשמירה'));
@@ -1138,7 +1185,8 @@ function render() {
     cell.className = 'cell' +
       (!has      ? ' empty'    : '') +
       (isSel     ? ' selected' : '') +
-      (lk        ? ' locked'   : '');
+      (lk        ? ' locked'   : '') +
+      (isGk      ? ' gk-mark'  : '');
 
     if (has) {
       cell.style.borderColor = SZ_HEX[e.size] + '88';
@@ -1224,29 +1272,29 @@ function openPk(n) {
   }, 60);
 }
 
-function closePk() {
+function closePk(skipRender) {
   document.getElementById('pickerWrap').classList.remove('open');
   document.getElementById('pkLocked').classList.remove('show');
   document.getElementById('pkNormal').style.display = 'none';
   sel = null;
-  render();
+  if (!skipRender) render();
 }
 
 function assignSize(sz) {
   if (sel === null) return;
+  const num  = sel;
   const lock = document.getElementById('lkChk').checked;
   const qtyActive = document.querySelector('.qty-btn.active');
   const qty = qtyActive ? +qtyActive.textContent : 1;
-  const gk = !!data[sel]?.gk;
-  applySize(sel, sz ? {size: sz, locked: lock, qty, gk} : null);
-  closePk();
+  const gk  = !!data[num]?.gk;
+  closePk(true);                                             // clears sel, no render
+  applySize(num, sz ? {size: sz, locked: lock, qty, gk} : null); // one render
 }
 
 function unlockSel() {
   if (sel === null) return;
   applyLocked(sel, false);
   openPk(sel);
-  render();
 }
 
 function toggleGk() {
@@ -1301,7 +1349,6 @@ function tgLock(n) {
   applyLocked(n, newLk);
   showToast(newLk ? `🔒 מספר ${n} ננעל` : `🔓 מספר ${n} שוחרר`);
   if (sel === n) openPk(n);
-  else render();
 }
 
 /* ══════════════════ CLEAR ALL ══════════════════ */
@@ -1355,6 +1402,22 @@ function renderSum() {
   const total = Object.values(data).filter(d => d?.size).length;
   const today = new Date().toLocaleDateString('he-IL', {day:'numeric', month:'long', year:'numeric'});
 
+  // GK row
+  const gkNums = Object.keys(data)
+    .map(n => +n)
+    .filter(n => data[n]?.gk && data[n]?.size)
+    .sort((a, b) => a - b);
+  const gkRow = document.getElementById('sumGkRow');
+  if (gkRow) {
+    if (gkNums.length) {
+      gkRow.style.display = 'flex';
+      gkRow.innerHTML = `<span class="sum-gk-label">שוערים:</span>` +
+        gkNums.map(n => `<span class="sum-gk-num">#${n}</span>`).join('');
+    } else {
+      gkRow.style.display = 'none';
+    }
+  }
+
   const totalUnits = Object.values(data).filter(d => d?.size).reduce((s, d) => s + (d.qty || 1), 0);
   const unitsExtra = totalUnits > total ? ` • <strong>${totalUnits} יחידות</strong>` : '';
   document.getElementById('sumInfo').innerHTML =
@@ -1377,11 +1440,9 @@ function renderSum() {
         </div>
         <div class="sum-nums">
           ${g[sz].map(n => {
-            const note = data[n]?.note;
             const qty  = data[n]?.qty || 1;
             const isGk = !!data[n]?.gk;
-            return `<div class="sum-num">#${n}${isGk?' שוער':''}${qty>1?` <strong style="color:var(--blue)">×${qty}</strong>`:''}`
-              + `${note ? `<span class="sum-note-text">${note}</span>` : ''}</div>`;
+            return `<div class="sum-num">#${n}${isGk?' שוער':''}${qty>1?` <strong style="color:var(--blue)">×${qty}</strong>`:''}</div>`;
           }).join('')}
         </div>
       </div>`)
@@ -1402,10 +1463,9 @@ function buildExportDOM() {
         <div style="font-size:13px;color:#64748b;min-width:72px;padding-top:3px;">${g[sz].length} שחקנים</div>
         <div style="display:flex;flex-wrap:wrap;gap:5px;">
           ${g[sz].map(n => {
-            const note = data[n]?.note;
             const qty  = data[n]?.qty || 1;
             const isGk = !!data[n]?.gk;
-            return `<span style="font-size:14px;font-weight:700;padding:3px 9px;border-radius:5px;color:${SZ_HEX[sz]};border:1.5px solid ${SZ_HEX[sz]}55;background:${SZ_BG_HEX[sz]}">#${n}${isGk?' שוער':''}${qty>1?` <span style="color:#2563a8">×${qty}</span>`:''}${note ? `<span style="font-size:11px;font-weight:400;display:block;color:#64748b">${note}</span>` : ''}</span>`;
+            return `<span style="font-size:14px;font-weight:700;padding:3px 9px;border-radius:5px;color:${SZ_HEX[sz]};border:1.5px solid ${SZ_HEX[sz]}55;background:${SZ_BG_HEX[sz]}">#${n}${isGk?' שוער':''}${qty>1?` <span style="color:#2563a8">×${qty}</span>`:''}</span>`;
           }).join('')}
         </div>
       </div>`)
@@ -1572,7 +1632,14 @@ function saveOrderNote(text) {
   }
 }
 
+/* ── Note auto-save: debounced on input + immediate on blur ── */
+let _noteTimer;
+document.getElementById('orderNoteArea').addEventListener('input', function() {
+  clearTimeout(_noteTimer);
+  _noteTimer = setTimeout(() => saveOrderNote(this.value), 1500);
+});
 document.getElementById('orderNoteArea').addEventListener('blur', function() {
+  clearTimeout(_noteTimer);
   saveOrderNote(this.value);
 });
 
@@ -1581,9 +1648,28 @@ function setConn(type, text) {
   const el = document.getElementById('connBadge');
   el.textContent = text;
   el.className = 'conn-badge cb-' + type;
+  const retry = document.getElementById('retryBtn');
+  if (retry) retry.style.display = (type === 'err' && !IS_DEMO) ? 'inline-block' : 'none';
 }
 
 function pause(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Escape closes picker
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && sel !== null) closePk();
+});
+
+// Retry Firebase connection
+function retryConn() {
+  document.getElementById('retryBtn').style.display = 'none';
+  if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+  _noteLoaded = false;
+  data = {};
+  loadCache();
+  setConn('loading', 'מתחבר...');
+  document.getElementById('loadingOverlay').style.display = 'flex';
+  setTimeout(initFirebase, 300);
+}
 
 let toastTimer;
 function showToast(msg) {
